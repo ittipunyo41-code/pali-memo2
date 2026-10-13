@@ -19,11 +19,13 @@ function offlineServiceWorker(): Plugin {
   return {
     name: 'offline-service-worker',
     apply: 'build',
+    // ต้องรันหลัง plugin ของ Vite ที่สร้าง index.html และไฟล์ CSS ไม่งั้นรายการ precache จะไม่ครบ
+    enforce: 'post',
     configResolved(config) {
       publicDir = config.publicDir
     },
     generateBundle(_options, bundle) {
-      const files = new Set<string>(['./'])
+      const files = new Set<string>(['./', 'index.html'])
       for (const name of Object.keys(bundle)) {
         if (!name.endsWith('.map')) files.add(name)
       }

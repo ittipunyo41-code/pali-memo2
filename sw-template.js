@@ -10,6 +10,7 @@ const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com']
 
 const scoped = (p) => new URL(p, self.registration.scope).href
 const INDEX_URL = scoped('index.html')
+const SCOPE_URL = scoped('./')
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -36,10 +37,13 @@ self.addEventListener('activate', (event) => {
 })
 
 async function navigate(request) {
-  const cached = await caches.match(INDEX_URL)
+  const cache = await caches.open(CACHE)
+  const cached = (await cache.match(INDEX_URL)) || (await cache.match(SCOPE_URL))
   if (cached) return cached
   try {
-    return await fetch(request)
+    const response = await fetch(request)
+    if (response.ok) cache.put(INDEX_URL, response.clone())
+    return response
   } catch {
     return new Response('ออฟไลน์ และยังไม่มีข้อมูลในแคช', {
       status: 503,
