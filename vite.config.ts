@@ -81,8 +81,11 @@ export default defineConfig({
       },
     },
   },
-  // GitHub Pages serves this project under /<repository-name>/.
-  base: process.env.GITHUB_ACTIONS === 'true' ? '/pali-memorize-vue/' : './',
+  // GitHub Pages serves this project under /<repository-name>/ (อ่านชื่อรีโปจาก GITHUB_REPOSITORY อัตโนมัติ)
+  base:
+    process.env.GITHUB_ACTIONS === 'true'
+      ? `/${process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'pali-memo2'}/`
+      : './',
   // Server configuration
   server: {
     port: 3000,
