@@ -296,6 +296,27 @@ const resetPractice = () => {
   activeHiddenIndex.value = -1
 }
 
+// โหมดขยายเต็มจอ: ซ่อน header/footer ให้ช่องข้อความและพื้นที่เลือกคำใช้พื้นที่เต็ม
+const isExpanded = ref(false)
+
+const syncFullscreen = () => {
+  // ผู้ใช้กด Esc ออกจาก fullscreen ของเบราว์เซอร์ → ออกจากโหมดขยายด้วย
+  if (isExpanded.value && !document.fullscreenElement) isExpanded.value = false
+}
+
+const toggleExpand = async () => {
+  isExpanded.value = !isExpanded.value
+  try {
+    if (isExpanded.value) {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.()
+    } else if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    }
+  } catch {
+    // iOS/บางเบราว์เซอร์ไม่รองรับ Fullscreen API — ยังขยายเต็มหน้าต่างด้วย CSS ได้ตามปกติ
+  }
+}
+
 const setMode = (next: AppMode) => {
   if (next === mode.value) return
   mode.value = next
@@ -337,6 +358,10 @@ const moveFocusAndAutoReveal = (newIndex: number) => {
 
 const handleKeyDown = (event: KeyboardEvent) => {
   const target = event.target as HTMLElement | null
+  if (event.key === 'Escape' && isExpanded.value && !document.fullscreenElement) {
+    isExpanded.value = false
+    return
+  }
   if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return
 
   if (mode.value === 'edit') {
@@ -497,6 +522,7 @@ onMounted(() => {
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', endPaint)
   window.addEventListener('pointercancel', endPaint)
+  document.addEventListener('fullscreenchange', syncFullscreen)
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
   window.addEventListener('beforeinstallprompt', onBeforeInstall)
@@ -509,6 +535,7 @@ onUnmounted(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', endPaint)
   window.removeEventListener('pointercancel', endPaint)
+  document.removeEventListener('fullscreenchange', syncFullscreen)
   window.removeEventListener('online', onOnline)
   window.removeEventListener('offline', onOffline)
   window.removeEventListener('beforeinstallprompt', onBeforeInstall)
@@ -517,7 +544,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="gemini-app font-sarabun" :data-theme="themeMode">
+  <div
+    class="gemini-app font-sarabun"
+    :class="{ 'is-expanded': isExpanded, 'in-edit': mode === 'edit' }"
+    :data-theme="themeMode"
+  >
     <header class="app-header">
       <div class="brand">
         <span class="sparkle-icon">✨</span>
@@ -575,6 +606,14 @@ onUnmounted(() => {
               🎯 ฝึกท่อง
             </button>
           </div>
+          <button
+            class="btn-ghost btn-expand"
+            :title="isExpanded ? 'ย่อกลับ (Esc)' : 'ขยายพื้นที่ทำงานเต็มจอ'"
+            :aria-pressed="isExpanded"
+            @click="toggleExpand"
+          >
+            {{ isExpanded ? '🗗 ย่อกลับ' : '⛶ ขยายเต็มจอ' }}
+          </button>
           <span class="count-pill">
             <template v-if="mode === 'edit'">ซ่อน {{ hiddenCount }} / {{ totalCount }} คำ</template>
             <template v-else>เปิดแล้ว {{ revealedCount }} / {{ hiddenCount }} คำ</template>
@@ -1380,6 +1419,37 @@ kbd {
 }
 
 .line-toggle:hover { background: var(--btn-hover); }
+
+/* ================= โหมดขยายเต็มจอ ================= */
+.gemini-app.is-expanded {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+.is-expanded .app-header,
+.is-expanded .app-footer { display: none; }
+.is-expanded .app-main { overflow: hidden; }
+.is-expanded .reader-canvas { flex: 1 1 0; min-height: 0; }
+
+/* โหมดเลือกคำ: ช่องข้อความ (ซ้าย) + พื้นที่เลือกคำ (ขวา) เต็มความสูงจอ */
+.is-expanded.in-edit .app-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.is-expanded.in-edit .control-card { min-height: 0; overflow-y: auto; }
+.is-expanded.in-edit .notion-input {
+  flex: 1 1 auto;
+  min-height: 10rem;
+  resize: none;
+  font-size: 1.5rem;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .is-expanded.in-edit .app-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+}
 
 /* ================= จอเล็ก ================= */
 @media (max-width: 640px) {
