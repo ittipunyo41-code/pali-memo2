@@ -26,21 +26,6 @@ interface BeforeInstallPromptEvent extends Event {
 type ThemeMode = 'light' | 'sepia' | 'dark'
 type AppMode = 'edit' | 'practice'
 
-const presets = [
-  {
-    title: 'อิติปิโส (พุทธคุณ)',
-    text: 'อิติปิ โส ภะคะวา อะระหัง สัมมาสัมพุทโธ วิชชาจะระณะสัมปันโน สุคะโต โลกะวิทู อะนุตตะโร ปุริสะทัมมะสาระถิ สัตถา เทวะมะนุสสานัง พุทโธ ภะคะวาติ'
-  },
-  {
-    title: 'พาหุง (ท่อนแรก)',
-    text: 'พาหุง สะหัสสะมะภินิมมิตะสาวุธันตัง\nครีเมขะลัง อุทิตะโฆระสะเสนะมารัง\nทานาทิธัมมะวิธินา ชิตะวา มุนินโท\nตันเตชะสา ภะวะตุ เต ชะยะมังคะลานิ'
-  },
-  {
-    title: 'ชินบัญชร (ย่อ)',
-    text: 'ชินะปัญชะระปะริตตัง\nมัง รักขะตุ สัพพะทา'
-  }
-]
-
 const MIN_FONT = 1.1
 const MAX_FONT = 2.5
 
@@ -102,10 +87,9 @@ const parseText = (text: string, previous: WordItem[] = []): WordItem[] => {
 
 // ============ State ============
 const stored = loadStored()
-const initialPreset = presets[0] ?? { title: '', text: '' }
 const hasStoredText = typeof stored.text === 'string' && stored.text.trim().length > 0
 
-const inputText = ref<string>(hasStoredText ? (stored.text as string) : initialPreset.text)
+const inputText = ref<string>(hasStoredText ? (stored.text as string) : '')
 const processedWords = ref<WordItem[]>(parseText(inputText.value))
 let parsedText = inputText.value
 
@@ -447,8 +431,6 @@ const loadPassage = (text: string, bits?: string) => {
   history.value = []
 }
 
-const selectPreset = (text: string) => loadPassage(text)
-
 const loadCustom = (p: SavedPassage) => loadPassage(p.text, p.hidden)
 
 const openSaveForm = () => {
@@ -639,29 +621,6 @@ onUnmounted(() => {
           </span>
         </div>
 
-        <div class="preset-row">
-          <span class="label">บทสวด:</span>
-          <div class="preset-pills">
-            <button v-for="p in presets" :key="p.title" @click="selectPreset(p.text)" class="pill-btn">
-              {{ p.title }}
-            </button>
-            <span v-for="p in customPassages" :key="p.id" class="pill-group">
-              <button @click="loadCustom(p)" class="pill-btn is-custom" title="บทที่บันทึกไว้ (พร้อมคำที่เลือกซ่อน)">
-                ⭐ {{ p.title }}
-              </button>
-              <button
-                v-if="mode === 'edit'"
-                @click="deleteCustom(p)"
-                class="pill-del"
-                :title="`ลบ ${p.title}`"
-                :aria-label="`ลบ ${p.title}`"
-              >
-                ×
-              </button>
-            </span>
-          </div>
-        </div>
-
         <!-- ===== โหมดเลือกคำที่ซ่อน ===== -->
         <template v-if="mode === 'edit'">
           <div class="edit-font-row">
@@ -677,7 +636,46 @@ onUnmounted(() => {
             class="notion-input"
             placeholder="พิมพ์หรือวางบทสวดบาลี... (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
           ></textarea>
+        </template>
 
+        <!-- ===== โหมดฝึกท่อง ===== -->
+        <div v-else class="action-row">
+          <div class="diff-group">
+            <span class="label">สุ่มซ่อนใหม่:</span>
+            <button @click="applyRandom(0.25)" class="btn-diff">25%</button>
+            <button @click="applyRandom(0.5)" class="btn-diff">50%</button>
+            <button @click="applyRandom(0.75)" class="btn-diff">75%</button>
+            <button @click="applyRandom(1)" class="btn-diff dark">100%</button>
+          </div>
+
+          <div class="toggle-group">
+            <button @click="toggleAll(true)" class="btn-ghost">👁️ เฉลยหมด</button>
+            <button @click="toggleAll(false)" class="btn-ghost">🙈 ซ่อนหมด</button>
+            <button @click="undoReveal" class="btn-ghost" title="ปิดคำที่เปิดไว้ล่าสุด (ถอยหลังทีละคำ)">⌫ ปิดคำล่าสุด</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="right-pane">
+        <div v-if="customPassages.length" class="saved-row">
+          <span class="label">บทที่บันทึก:</span>
+          <span v-for="p in customPassages" :key="p.id" class="pill-group">
+            <button @click="loadCustom(p)" class="pill-btn is-custom" title="บทที่บันทึกไว้ (พร้อมคำที่เลือกซ่อน)">
+              ⭐ {{ p.title }}
+            </button>
+            <button
+              v-if="mode === 'edit'"
+              @click="deleteCustom(p)"
+              class="pill-del"
+              :title="`ลบ ${p.title}`"
+              :aria-label="`ลบ ${p.title}`"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+
+        <div v-if="mode === 'edit'" class="edit-actions">
           <div class="action-row">
             <div class="toggle-group">
               <button @click="undoSelection" class="btn-ghost" :disabled="!canUndo" title="เลิกทำการเลือกล่าสุด (Ctrl+Z)">
@@ -713,25 +711,7 @@ onUnmounted(() => {
             </div>
             <button @click="setMode('practice')" class="btn-export" :disabled="!hiddenCount">▶ เริ่มฝึกท่อง</button>
           </div>
-        </template>
-
-        <!-- ===== โหมดฝึกท่อง ===== -->
-        <div v-else class="action-row">
-          <div class="diff-group">
-            <span class="label">สุ่มซ่อนใหม่:</span>
-            <button @click="applyRandom(0.25)" class="btn-diff">25%</button>
-            <button @click="applyRandom(0.5)" class="btn-diff">50%</button>
-            <button @click="applyRandom(0.75)" class="btn-diff">75%</button>
-            <button @click="applyRandom(1)" class="btn-diff dark">100%</button>
-          </div>
-
-          <div class="toggle-group">
-            <button @click="toggleAll(true)" class="btn-ghost">👁️ เฉลยหมด</button>
-            <button @click="toggleAll(false)" class="btn-ghost">🙈 ซ่อนหมด</button>
-            <button @click="undoReveal" class="btn-ghost" title="ปิดคำที่เปิดไว้ล่าสุด (ถอยหลังทีละคำ)">⌫ ปิดคำล่าสุด</button>
-          </div>
         </div>
-      </section>
 
       <article class="reader-canvas">
         <template v-if="groupedLines.length > 0">
@@ -802,9 +782,10 @@ onUnmounted(() => {
         </template>
 
         <div v-else class="empty-state">
-          <p>เลือกบทสวดมนต์ด้านบน หรือพิมพ์ข้อความในแท็บ “เลือกคำที่ซ่อน”</p>
+          <p>พิมพ์หรือวางบทสวดในช่องข้อความ (แท็บ “เลือกคำที่ซ่อน”) เพื่อเริ่มต้น</p>
         </div>
       </article>
+      </div>
     </main>
 
     <footer class="app-footer">
@@ -1062,13 +1043,6 @@ html, body {
   gap: 0.5rem;
   box-shadow: 0 1px 3px var(--shadow);
   transition: background 0.3s, border-color 0.3s;
-}
-
-.preset-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 .label {
@@ -1454,12 +1428,37 @@ kbd {
 .is-expanded .app-header,
 .is-expanded .app-footer { display: none; }
 .is-expanded .app-main { overflow: hidden; }
+.right-pane {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  min-width: 0;
+}
+.edit-actions {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: 0 1px 3px var(--shadow);
+}
+.saved-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.is-expanded .right-pane { flex: 1 1 0; overflow: hidden; }
 .is-expanded .reader-canvas { flex: 1 1 0; min-height: 0; }
 
 /* โหมดเลือกคำ: ช่องข้อความ (ซ้าย) + พื้นที่เลือกคำ (ขวา) เต็มความสูงจอ */
 .is-expanded.in-edit .app-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
   grid-template-rows: minmax(0, 1fr);
 }
 .is-expanded.in-edit .control-card { min-height: 0; overflow-y: auto; }
@@ -1479,8 +1478,6 @@ kbd {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr);
   }
-  /* มือถือ: ซ่อนแถวเลือกบทสวดตอนขยาย เพื่อให้ช่องข้อความสูงขึ้น */
-  .is-expanded.in-edit .preset-row { display: none; }
   /* ขณะพิมพ์ (คีย์บอร์ดเปิด) ให้ช่องข้อความได้พื้นที่มากขึ้น */
   .is-expanded.in-edit .app-main:has(.notion-input:focus) {
     grid-template-rows: minmax(0, 1fr) minmax(0, 0.45fr);
