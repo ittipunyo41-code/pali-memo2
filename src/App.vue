@@ -299,21 +299,41 @@ const resetPractice = () => {
 // โหมดขยายเต็มจอ: ซ่อน header/footer ให้ช่องข้อความและพื้นที่เลือกคำใช้พื้นที่เต็ม
 const isExpanded = ref(false)
 
-const syncFullscreen = () => {
-  // ผู้ใช้กด Esc ออกจาก fullscreen ของเบราว์เซอร์ → ออกจากโหมดขยายด้วย
-  if (isExpanded.value && !document.fullscreenElement) isExpanded.value = false
+// ขนาดตัวอักษรของช่องข้อความ (ปรับได้ แยกจากขนาดตัวอักษรของพื้นที่อ่าน)
+const EDIT_FONT_KEY = 'pali-edit-font'
+const loadEditFont = (): number => {
+  try {
+    const v = Number(localStorage.getItem(EDIT_FONT_KEY))
+    return v >= 0.9 && v <= 3 ? v : 1.25
+  } catch {
+    return 1.25
+  }
+}
+const editFontSize = ref<number>(loadEditFont())
+const changeEditFont = (delta: number) => {
+  const next = Math.round((editFontSize.value + delta) * 100) / 100
+  if (next < 0.9 || next > 3) return
+  editFontSize.value = next
+  try {
+    localStorage.setItem(EDIT_FONT_KEY, String(next))
+  } catch {
+    // ข้ามได้ ไม่กระทบการใช้งาน
+  }
 }
 
 const toggleExpand = async () => {
   isExpanded.value = !isExpanded.value
+  // Fullscreen จริงของเบราว์เซอร์ใช้เฉพาะเดสก์ท็อป (เมาส์) — บนมือถือคีย์บอร์ดทำให้หลุด fullscreen
+  // จึงใช้การขยายด้วย CSS อย่างเดียว และสถานะขยายไม่ผูกกับ fullscreen อีกต่อไป
   try {
-    if (isExpanded.value) {
-      if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.()
-    } else if (document.fullscreenElement) {
+    const isDesktop = window.matchMedia('(pointer: fine)').matches
+    if (isExpanded.value && isDesktop && !document.fullscreenElement) {
+      await document.documentElement.requestFullscreen?.()
+    } else if (!isExpanded.value && document.fullscreenElement) {
       await document.exitFullscreen()
     }
   } catch {
-    // iOS/บางเบราว์เซอร์ไม่รองรับ Fullscreen API — ยังขยายเต็มหน้าต่างด้วย CSS ได้ตามปกติ
+    // ไม่รองรับ Fullscreen API — ยังขยายเต็มหน้าต่างด้วย CSS ได้
   }
 }
 
@@ -358,8 +378,9 @@ const moveFocusAndAutoReveal = (newIndex: number) => {
 
 const handleKeyDown = (event: KeyboardEvent) => {
   const target = event.target as HTMLElement | null
-  if (event.key === 'Escape' && isExpanded.value && !document.fullscreenElement) {
+  if (event.key === 'Escape' && isExpanded.value) {
     isExpanded.value = false
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
     return
   }
   if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return
@@ -522,7 +543,6 @@ onMounted(() => {
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', endPaint)
   window.addEventListener('pointercancel', endPaint)
-  document.addEventListener('fullscreenchange', syncFullscreen)
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
   window.addEventListener('beforeinstallprompt', onBeforeInstall)
@@ -535,7 +555,6 @@ onUnmounted(() => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', endPaint)
   window.removeEventListener('pointercancel', endPaint)
-  document.removeEventListener('fullscreenchange', syncFullscreen)
   window.removeEventListener('online', onOnline)
   window.removeEventListener('offline', onOffline)
   window.removeEventListener('beforeinstallprompt', onBeforeInstall)
@@ -645,9 +664,16 @@ onUnmounted(() => {
 
         <!-- ===== โหมดเลือกคำที่ซ่อน ===== -->
         <template v-if="mode === 'edit'">
+          <div class="edit-font-row">
+            <span class="tool-label">ขนาดข้อความในช่อง:</span>
+            <button @click="changeEditFont(-0.15)" class="btn-tool" title="ลดขนาดข้อความในช่อง">A-</button>
+            <span class="font-indicator">{{ Math.round((editFontSize / 1.25) * 100) }}%</span>
+            <button @click="changeEditFont(0.15)" class="btn-tool" title="เพิ่มขนาดข้อความในช่อง">A+</button>
+          </div>
           <textarea
             v-model="inputText"
             rows="3"
+            :style="{ fontSize: `${editFontSize}rem` }"
             class="notion-input"
             placeholder="พิมพ์หรือวางบทสวดบาลี... (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
           ></textarea>
@@ -1441,13 +1467,23 @@ kbd {
   flex: 1 1 auto;
   min-height: 10rem;
   resize: none;
-  font-size: 1.5rem;
   line-height: 1.6;
+}
+.edit-font-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 @media (max-width: 900px) {
   .is-expanded.in-edit .app-main {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+  /* มือถือ: ซ่อนแถวเลือกบทสวดตอนขยาย เพื่อให้ช่องข้อความสูงขึ้น */
+  .is-expanded.in-edit .preset-row { display: none; }
+  /* ขณะพิมพ์ (คีย์บอร์ดเปิด) ให้ช่องข้อความได้พื้นที่มากขึ้น */
+  .is-expanded.in-edit .app-main:has(.notion-input:focus) {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 0.45fr);
   }
 }
 
@@ -1459,6 +1495,7 @@ kbd {
   }
   .title { font-size: 1.5rem; }
   .tool-label { display: none; }
+  .edit-font-row .tool-label { display: inline; }
   .reader-canvas { padding: 1rem; }
   .app-footer { font-size: 0.95rem; }
 }
