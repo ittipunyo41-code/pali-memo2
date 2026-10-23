@@ -46,6 +46,14 @@ const isTimerRunning = ref<boolean>(false)
 // ลบเครื่องหมายวรรคตอนเพื่อเอาไว้เช็กคำตอบ
 const cleanWord = (str: string) => str.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '').trim()
 
+// ความกว้างช่อง input แบบ 3 ระดับ (สั้น/กลาง/ยาว) — กว้างพอสำหรับคำบาลียาว
+// แต่ไม่เฉลยความยาวที่แน่นอนของคำที่ซ่อน
+const inputWidthClass = (len: number): string => {
+  if (len <= 5) return 'w-32 md:w-40'
+  if (len <= 10) return 'w-44 md:w-56'
+  return 'w-56 md:w-72'
+}
+
 // สุ่มซ่อนคำ
 const generateTest = (hideRatio: number): void => {
   if (!inputText.value.trim()) return
@@ -156,7 +164,7 @@ onUnmounted(() => stopTimer())
     @import url('https://fonts.googleapis.com/css2?family=TH+Sarabun+New:ital,wght@0,400;0,700;1,400;1,700&display=swap');
     
     .font-sarabun {
-      font-family: 'TH Sarabun New', sans-serif;
+      font-family: 'TH Sarabun New', 'Sarabun', 'Leelawadee UI', 'Tahoma', sans-serif;
     }
   </component>
 
@@ -231,10 +239,10 @@ onUnmounted(() => stopTimer())
         <!-- ปุ่มเลือกระดับความยาก -->
         <div class="flex flex-wrap items-center gap-2">
           <span class="font-bold text-amber-900">ซ่อนคำ:</span>
-          <button @click="generateTest(0.25)" class="bg-amber-200 hover:bg-amber-300 text-amber-950 px-3 py-1 rounded-lg border border-amber-400 text-lg transition">25%</button>
-          <button @click="generateTest(0.50)" class="bg-amber-300 hover:bg-amber-400 text-amber-950 px-3 py-1 rounded-lg border border-amber-400 text-lg transition">50%</button>
-          <button @click="generateTest(0.75)" class="bg-amber-400 hover:bg-amber-500 text-amber-950 px-3 py-1 rounded-lg border border-amber-400 text-lg transition">75%</button>
-          <button @click="generateTest(1.00)" class="bg-amber-700 hover:bg-amber-800 text-white px-3 py-1 rounded-lg text-lg transition">100%</button>
+          <button @click="generateTest(0.25)" class="bg-amber-200 hover:bg-amber-300 text-amber-950 px-3 py-1 min-h-[44px] min-w-[56px] rounded-lg border border-amber-400 text-lg transition">25%</button>
+          <button @click="generateTest(0.50)" class="bg-amber-300 hover:bg-amber-400 text-amber-950 px-3 py-1 min-h-[44px] min-w-[56px] rounded-lg border border-amber-400 text-lg transition">50%</button>
+          <button @click="generateTest(0.75)" class="bg-amber-400 hover:bg-amber-500 text-amber-950 px-3 py-1 min-h-[44px] min-w-[56px] rounded-lg border border-amber-400 text-lg transition">75%</button>
+          <button @click="generateTest(1.00)" class="bg-amber-700 hover:bg-amber-800 text-white px-3 py-1 min-h-[44px] min-w-[56px] rounded-lg text-lg transition">100%</button>
         </div>
 
       </div>
@@ -258,7 +266,7 @@ onUnmounted(() => stopTimer())
       </div>
 
       <!-- Section 4: แสดงผลบทสวดมนต์ (Display Area) -->
-      <div class="flex-1 p-6 bg-amber-50/30 border-2 border-amber-200 rounded-2xl min-h-[200px] text-2xl md:text-3xl leading-loose">
+      <div class="flex-1 p-6 bg-amber-50/30 border-2 border-amber-200 rounded-2xl min-h-[200px] text-2xl md:text-3xl lg:text-4xl leading-loose">
         <template v-if="processedWords.length > 0">
           <span
             v-for="item in processedWords"
@@ -287,12 +295,12 @@ onUnmounted(() => stopTimer())
                 <input
                   v-model="item.userInput"
                   type="text"
-                  class="w-28 md:w-36 px-2 py-0.5 text-center border-b-2 text-2xl focus:outline-none rounded"
-                  :class="{
+                  class="max-w-full px-2 py-0.5 text-center border-b-2 text-2xl focus:outline-none rounded"
+                  :class="[inputWidthClass(item.cleanText.length), {
                     'border-amber-500 bg-amber-100/50': item.isCorrect === undefined,
                     'border-green-600 bg-green-100 text-green-900 font-bold': item.isCorrect === true,
                     'border-red-500 bg-red-100 text-red-900': item.isCorrect === false
-                  }"
+                  }]"
                   placeholder="???"
                 />
                 <span v-if="item.isRevealed && item.isCorrect === false" class="text-sm text-red-600 ml-1">

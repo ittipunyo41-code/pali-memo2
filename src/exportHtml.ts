@@ -105,18 +105,22 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
     line-height: 2.2; font-size: var(--font-size);
     transition: font-size 0.2s ease; color: var(--text);
   }
-  .line { margin-bottom: 0.25rem; }
+  /* ข้ามการ layout/paint ของบรรทัดที่อยู่นอกจอ — ช่วยเอกสารยาวมาก */
+  .line {
+    margin-bottom: 0.25rem;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3.5rem;
+  }
   .word { display: inline-block; margin-right: 0.6rem; }
   .hidden-slot {
     display: inline; position: relative;
     border-bottom: 2px dashed var(--slot-dash);
     cursor: pointer; user-select: none;
-    transition: border-color 0.18s ease;
   }
   .hidden-slot .slot-text {
     opacity: 0; visibility: hidden;
     color: var(--slot-text); font-weight: 700; letter-spacing: 0.02em;
-    white-space: nowrap; transition: opacity 0.18s ease;
+    white-space: nowrap;
   }
   @media (hover: hover) {
     .hidden-slot:hover { border-color: var(--slot-active); border-bottom-style: solid; }
@@ -128,6 +132,10 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
   .footer {
     margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);
     font-size: 0.95rem; color: var(--text-soft); text-align: center;
+  }
+  @media (max-width: 640px) {
+    body { padding: 1rem 0.5rem; }
+    .container { padding: 1rem; }
   }
   kbd {
     background: var(--btn-bg); border: 1px solid var(--border); border-radius: 4px;
@@ -183,43 +191,62 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
     });
   }
 
-  function render() {
+  var slotEls = [];
+  var hiddenIndexOf = new Map();
+  hiddenWords.forEach(function(w, i) { hiddenIndexOf.set(w, i); });
+
+  // สร้าง DOM ครั้งเดียว (ใช้ array + join แทนการต่อสตริง) แล้วอัปเดตเฉพาะ class ภายหลัง
+  function build() {
     var byLine = new Map();
     words.forEach(function(w) {
       if (!byLine.has(w.lineIndex)) byLine.set(w.lineIndex, []);
       byLine.get(w.lineIndex).push(w);
     });
-    var container = document.getElementById('content');
-    container.innerHTML = '';
+    var out = [];
     Array.from(byLine.keys()).sort(function(a, b) { return a - b; }).forEach(function(lineIdx) {
-      var lineEl = document.createElement('div');
-      lineEl.className = 'line';
+      out.push('<div class="line">');
       byLine.get(lineIdx).forEach(function(w) {
-        var wrap = document.createElement('span');
-        wrap.className = 'word';
         if (w.isHidden) {
-          var slot = document.createElement('span');
-          var isActive = activeIndex >= 0 && hiddenWords[activeIndex] === w;
-          slot.className = 'hidden-slot'
-            + (w.isRevealed ? ' is-revealed' : '')
-            + (isActive ? ' is-active' : '');
-          slot.innerHTML = '<span class="slot-text">' + escapeHtml(w.text) + '</span>';
-          slot.addEventListener('click', function() {
-            w.isRevealed = !w.isRevealed;
-            var i = hiddenWords.indexOf(w);
-            if (i >= 0) activeIndex = i;
-            render();
-          });
-          wrap.appendChild(slot);
+          out.push('<span class="word"><span class="hidden-slot" data-h="' + hiddenIndexOf.get(w) + '">'
+            + '<span class="slot-text">' + escapeHtml(w.text) + '</span></span></span>');
         } else {
-          var p = document.createElement('span');
-          p.textContent = w.text;
-          wrap.appendChild(p);
+          out.push('<span class="word">' + escapeHtml(w.text) + '</span>');
         }
-        lineEl.appendChild(wrap);
       });
-      container.appendChild(lineEl);
+      out.push('</div>');
     });
+    var container = document.getElementById('content');
+    container.innerHTML = out.join('');
+    slotEls = Array.prototype.slice.call(container.querySelectorAll('.hidden-slot'));
+    slotEls.forEach(function(_, i) { updateSlot(i); });
+  }
+
+  function updateSlot(i) {
+    var el = slotEls[i];
+    if (!el) return;
+    el.classList.toggle('is-revealed', !!hiddenWords[i].isRevealed);
+    el.classList.toggle('is-active', i === activeIndex);
+  }
+
+  function setActive(i) {
+    var prev = activeIndex;
+    activeIndex = i;
+    if (prev >= 0 && prev !== i) updateSlot(prev);
+    updateSlot(i);
+  }
+
+  // Event delegation: ผูก listener ตัวเดียวที่ container
+  document.getElementById('content').addEventListener('click', function(e) {
+    var t = e.target;
+    var slot = t && t.closest ? t.closest('.hidden-slot') : null;
+    if (!slot) return;
+    var i = Number(slot.getAttribute('data-h'));
+    hiddenWords[i].isRevealed = !hiddenWords[i].isRevealed;
+    setActive(i);
+  });
+
+  function render() {
+    slotEls.forEach(function(_, i) { updateSlot(i); });
   }
 
   window.revealAll = function(reveal) {
@@ -234,8 +261,7 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
     }
     if (lastRevealedIdx !== -1) {
       hiddenWords[lastRevealedIdx].isRevealed = false;
-      activeIndex = lastRevealedIdx;
-      render();
+      setActive(lastRevealedIdx);
     }
   };
 
@@ -265,18 +291,16 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();
       if (activeIndex + 1 < hiddenWords.length) {
-        activeIndex++;
-        hiddenWords[activeIndex].isRevealed = true;
-        render();
+        hiddenWords[activeIndex + 1].isRevealed = true;
+        setActive(activeIndex + 1);
       }
       return;
     }
     if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (activeIndex - 1 >= 0) {
-        activeIndex--;
-        hiddenWords[activeIndex].isRevealed = true;
-        render();
+        hiddenWords[activeIndex - 1].isRevealed = true;
+        setActive(activeIndex - 1);
       }
       return;
     }
@@ -285,7 +309,7 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
   document.getElementById('fontLabel').textContent =
     Math.round((currentFontSize / 1.5) * 100) + '%';
   applyTheme(currentTheme);
-  render();
+  build();
 })();
 <\/script>
 </body>
