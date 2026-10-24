@@ -40,6 +40,7 @@ interface StoredState {
   theme: ThemeMode
   mode: AppMode
   custom: SavedPassage[]
+  title: string
 }
 
 const loadStored = (): Partial<StoredState> => {
@@ -153,6 +154,8 @@ const linkSame = ref<boolean>(false) // เลือก/ยกเลิกคำ
 const customPassages = ref<SavedPassage[]>(
   Array.isArray(stored.custom) ? stored.custom.filter(isSavedPassage) : []
 )
+// ชื่อบทที่กำลังใช้อยู่ (จากบทที่บันทึกไว้) ใช้ตั้งชื่อไฟล์ Export และชื่อแท็บ
+const currentTitle = ref<string>(typeof stored.title === 'string' ? stored.title : '')
 const showSaveForm = ref<boolean>(false)
 const saveName = ref<string>('')
 
@@ -496,7 +499,10 @@ const loadPassage = (text: string, bits?: string) => {
   history.value = []
 }
 
-const loadCustom = (p: SavedPassage) => loadPassage(p.text, p.hidden)
+const loadCustom = (p: SavedPassage) => {
+  loadPassage(p.text, p.hidden)
+  currentTitle.value = p.title
+}
 
 const openSaveForm = () => {
   if (!totalCount.value) return
@@ -517,23 +523,27 @@ const saveCurrent = () => {
   if (existing !== -1) customPassages.value.splice(existing, 1, entry)
   else customPassages.value.push(entry)
   showSaveForm.value = false
+  currentTitle.value = title
 }
 
 const deleteCustom = (p: SavedPassage) => {
   if (window.confirm(`ลบบท "${p.title}" ?`)) {
     customPassages.value = customPassages.value.filter(x => x.id !== p.id)
+    if (currentTitle.value === p.title) currentTitle.value = ''
   }
 }
 
 // ============ Export เป็นไฟล์ HTML แบบออฟไลน์ ============
 const exportHTML = () => {
   if (processedWords.value.length === 0) return
-  const html = buildExportHtml(processedWords.value, fontSize.value, themeMode.value)
+  const html = buildExportHtml(processedWords.value, fontSize.value, themeMode.value, currentTitle.value)
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `bali-practice-${Date.now()}.html`
+  // ชื่อไฟล์ = ชื่อบทที่บันทึก (ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้ออก)
+  const safeName = currentTitle.value.replace(/[\\/:*?"<>|\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80)
+  a.download = `${safeName || `bali-practice-${Date.now()}`}.html`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -558,9 +568,18 @@ const installApp = async () => {
 const onOnline = () => (isOnline.value = true)
 const onOffline = () => (isOnline.value = false)
 
+// ชื่อแท็บเบราว์เซอร์: ชื่อบท · ท่องบาลี
+watch(
+  currentTitle,
+  t => {
+    document.title = t ? `${t} · ท่องบาลี` : 'ท่องบาลี · ฝึกจำบทสวดมนต์'
+  },
+  { immediate: true }
+)
+
 // ============ บันทึกอัตโนมัติ ============
 watch(
-  [inputText, hiddenBits, themeMode, fontSize, currentRatio, mode, customPassages],
+  [inputText, hiddenBits, themeMode, fontSize, currentRatio, mode, customPassages, currentTitle],
   () => {
     try {
       const state: StoredState = {
@@ -570,7 +589,8 @@ watch(
         fontSize: fontSize.value,
         theme: themeMode.value,
         mode: mode.value,
-        custom: customPassages.value
+        custom: customPassages.value,
+        title: currentTitle.value
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
@@ -618,7 +638,7 @@ onUnmounted(() => {
     <header class="app-header">
       <div class="brand">
         <span class="sparkle-icon">✨</span>
-        <h1 class="title">บาลีฝึกท่องจำ</h1>
+        <h1 class="title">ท่องบาลี</h1>
         <span v-if="!isOnline" class="status-pill" title="ไม่มีอินเทอร์เน็ต แต่ยังใช้งานได้ตามปกติ">📴 ออฟไลน์</span>
       </div>
 
