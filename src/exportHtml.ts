@@ -6,7 +6,9 @@ export interface ExportWord {
 }
 
 /** สร้างไฟล์ HTML เดี่ยว (ไม่พึ่งไฟล์ภายนอก) สำหรับฝึกท่องแบบออฟไลน์ */
-export function buildExportHtml(words: ExportWord[], fontSize: number, theme: string): string {
+export function buildExportHtml(words: ExportWord[], fontSize: number, theme: string, title = ''): string {
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const pageTitle = title.trim() ? esc(title.trim()) : 'ท่องบาลี'
   // escape "<" กันข้อความที่มี </script> ทำให้ไฟล์พัง
   const wordsJson = JSON.stringify(
     words.map((w) => ({ text: w.text, isHidden: w.isHidden, isRevealed: w.isRevealed, lineIndex: w.lineIndex })),
@@ -19,7 +21,7 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>บาลีฝึกท่องจำ</title>
+<title>${pageTitle}</title>
 <style>
   :root {
     --font-size: ${initialFontSize}rem;
@@ -145,7 +147,7 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
 </head>
 <body>
 <div class="container">
-  <h1>✨ บาลีฝึกท่องจำ</h1>
+  <h1>✨ ${pageTitle}</h1>
   <div class="toolbar">
     <button onclick="revealAll(true)">👁️ เฉลยหมด</button>
     <button onclick="revealAll(false)">🙈 ซ่อนหมด</button>
