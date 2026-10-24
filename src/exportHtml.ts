@@ -159,9 +159,11 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
   </div>
   <div class="content" id="content"></div>
   <div class="footer">
-    💡 <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เลื่อน + Auto เปิดเฉลย |
-    <kbd>Delete</kbd> / <kbd>Backspace</kbd> ปิดคำล่าสุดถอยหลังทีละคำ |
-    <kbd>Shift</kbd>+<kbd>C</kbd> สลับเปิด/ปิดทั้งหมด
+    💡 <kbd>→</kbd>/<kbd>Space</kbd> เปิดคำถัดไป |
+    <kbd>←</kbd> ปิดคำนี้แล้วถอย |
+    <kbd>Delete</kbd> ปิดคำที่เปิดล่าสุด |
+    <kbd>Home</kbd>/<kbd>End</kbd> ซ่อน/เปิดทั้งหมด |
+    <kbd>Shift</kbd>+<kbd>C</kbd> สลับทั้งหมด
   </div>
 </div>
 <script>
@@ -277,34 +279,59 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
     }
   };
 
+  function scrollActive() {
+    var el = slotEls[activeIndex];
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function revealNext() {
+    var next = activeIndex + 1;
+    if (next >= hiddenWords.length) return;
+    hiddenWords[next].isRevealed = true;
+    setActive(next);
+    scrollActive();
+  }
+
+  function hideCurrentAndBack() {
+    var cur = hiddenWords[activeIndex];
+    if (!cur) return;
+    cur.isRevealed = false;
+    updateSlot(activeIndex);
+    setActive(activeIndex - 1);
+    scrollActive();
+  }
+
   document.addEventListener('keydown', function(e) {
     if (hiddenWords.length === 0) return;
-    if (e.shiftKey && (e.key === 'C' || e.key === 'c' || e.key === 'ฉ')) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
+    // ใช้ e.code เพื่อให้ทำงานได้ทั้งคีย์บอร์ดไทยและอังกฤษ
+    if (e.shiftKey && e.code === 'KeyC') {
       e.preventDefault();
       var allRevealed = hiddenWords.every(function(w) { return w.isRevealed; });
       window.revealAll(!allRevealed);
       return;
     }
+    if (e.shiftKey) return;
+    var onControl = !!(t && t.closest && t.closest('button, a, [role="button"], select, label'));
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
       window.undoReveal();
-      return;
-    }
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || (e.key === ' ' && !onControl)) {
       e.preventDefault();
-      if (activeIndex + 1 < hiddenWords.length) {
-        hiddenWords[activeIndex + 1].isRevealed = true;
-        setActive(activeIndex + 1);
-      }
-      return;
-    }
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      revealNext();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
-      if (activeIndex - 1 >= 0) {
-        hiddenWords[activeIndex - 1].isRevealed = true;
-        setActive(activeIndex - 1);
-      }
-      return;
+      hideCurrentAndBack();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      window.revealAll(false);
+      setActive(-1);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      window.revealAll(true);
+      setActive(hiddenWords.length - 1);
     }
   });
 
