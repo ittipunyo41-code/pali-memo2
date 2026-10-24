@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { buildExportHtml } from './exportHtml'
 
 interface WordItem {
@@ -59,6 +59,45 @@ const isSavedPassage = (v: unknown): v is SavedPassage => {
   return !!p && typeof p.id === 'string' && typeof p.title === 'string' && typeof p.text === 'string' && typeof p.hidden === 'string'
 }
 
+// ============ แปลง Markdown เป็นข้อความธรรมดา ============
+// ข้อความในช่องพิมพ์ยังเป็น Markdown เดิม แต่พื้นที่เลือกคำ/ฝึกท่องแสดงเฉพาะข้อความล้วน
+// คงจำนวนบรรทัดเดิมไว้ (บรรทัดที่เป็นแค่เครื่องหมาย เช่น --- หรือ ``` จะกลายเป็นบรรทัดว่าง)
+const stripMarkdownLine = (raw: string): string => {
+  let t = raw
+  t = t.replace(/^\s*(?:>\s?)+/, '') // quote
+  t = t.replace(/^\s{0,3}#{1,6}\s+/, '').replace(/\s+#+\s*$/, '') // heading
+  t = t.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '') // list
+  t = t.replace(/^\[[ xX]\]\s+/, '') // task checkbox
+  if (/^\s*\|.*\|\s*$/.test(t)) t = t.replace(/^\s*\||\|\s*$/g, '').replace(/\s*\|\s*/g, ' ') // table
+  t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1') // image
+  t = t.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // link
+  t = t.replace(/\[([^\]]+)\]\[[^\]]*\]/g, '$1') // reference link
+  t = t.replace(/\[\^[^\]]+\]/g, '') // footnote ref
+  t = t.replace(/<\/?[a-zA-Z][^>]*>/g, '') // html tag
+  t = t.replace(/`+([^`]+)`+/g, '$1') // inline code
+  t = t.replace(/(\*\*|__)(?=\S)(.+?)(?<=\S)\1/g, '$2') // bold
+  t = t.replace(/~~(?=\S)(.+?)(?<=\S)~~/g, '$1').replace(/==(?=\S)(.+?)(?<=\S)==/g, '$1')
+  t = t.replace(/\*([^\s*](?:[^*]*?[^\s*])?)\*/g, '$1') // italic *
+  t = t.replace(/(^|[\s(])_([^\s_](?:[^_]*?[^\s_])?)_(?=$|[\s).,;:!?])/g, '$1$2') // italic _
+  t = t.replace(/\\([\\`*_{}\[\]()#+\-.!|>~])/g, '$1') // escape
+  return t
+}
+
+const markdownToPlainLines = (text: string): string[] => {
+  let inFence = false
+  return text.split(/\r?\n/).map(line => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence
+      return ''
+    }
+    if (inFence) return line
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) return '' // เส้นคั่น
+    if (/^\s*=+\s*$/.test(line)) return ''
+    if (/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line)) return '' // แถวคั่นตาราง
+    return stripMarkdownLine(line)
+  })
+}
+
 // ============ แยกข้อความเป็นคำ ============
 const parseText = (text: string, previous: WordItem[] = []): WordItem[] => {
   const keyOf = (line: number, pos: number, word: string) => `${line}:${pos}:${word}`
@@ -66,7 +105,7 @@ const parseText = (text: string, previous: WordItem[] = []): WordItem[] => {
   previous.forEach(w => prevHidden.set(keyOf(w.lineIndex, w.pos, w.text), w.isHidden))
 
   const items: WordItem[] = []
-  text.split(/\r?\n/).forEach((line, lineIndex) => {
+  markdownToPlainLines(text).forEach((line, lineIndex) => {
     line
       .trim()
       .split(/\s+/)
@@ -352,14 +391,32 @@ const undoReveal = () => {
   }
 }
 
-const moveFocusAndAutoReveal = (newIndex: number) => {
-  if (newIndex >= 0 && newIndex < hiddenWords.value.length) {
-    activeHiddenIndex.value = newIndex
-    const nextWord = hiddenWords.value[newIndex]
-    if (nextWord) nextWord.isRevealed = true
-  }
+const scrollActiveIntoView = () => {
+  nextTick(() => {
+    document.querySelector('.hidden-slot.is-active')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
 }
 
+// → / Space: เปิดคำถัดไป
+const revealNext = () => {
+  const next = activeHiddenIndex.value + 1
+  if (next >= hiddenWords.value.length) return
+  activeHiddenIndex.value = next
+  const w = hiddenWords.value[next]
+  if (w) w.isRevealed = true
+  scrollActiveIntoView()
+}
+
+// ←: ปิดคำปัจจุบันแล้วถอยไปคำก่อนหน้า (ตรงข้ามกับ →)
+const hideCurrentAndBack = () => {
+  const cur = hiddenWords.value[activeHiddenIndex.value]
+  if (!cur) return
+  cur.isRevealed = false
+  activeHiddenIndex.value = activeHiddenIndex.value - 1
+  scrollActiveIntoView()
+}
+
+// ใช้ event.code (ตำแหน่งปุ่ม) เพื่อให้ทำงานได้ทั้งคีย์บอร์ดไทยและอังกฤษ
 const handleKeyDown = (event: KeyboardEvent) => {
   const target = event.target as HTMLElement | null
   if (event.key === 'Escape' && isExpanded.value) {
@@ -367,41 +424,49 @@ const handleKeyDown = (event: KeyboardEvent) => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
     return
   }
-  if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) return
+  if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable)) return
+
+  const mod = event.ctrlKey || event.metaKey
 
   if (mode.value === 'edit') {
-    if ((event.ctrlKey || event.metaKey) && (event.key === 'z' || event.key === 'Z')) {
+    if (mod && event.code === 'KeyZ' && !event.shiftKey) {
       event.preventDefault()
       undoSelection()
     }
     return
   }
 
-  if (hiddenWords.value.length === 0) return
+  if (hiddenWords.value.length === 0 || mod || event.altKey) return
 
-  if (event.shiftKey && (event.key === 'C' || event.key === 'c' || event.key === 'ฉ')) {
+  if (event.shiftKey && event.code === 'KeyC') {
     event.preventDefault()
     const allRevealed = hiddenWords.value.every(w => w.isRevealed)
     toggleAll(!allRevealed)
     return
   }
 
+  if (event.shiftKey) return
+
+  // Space/Enter บนปุ่มหรือคำที่โฟกัสอยู่ ให้ทำงานตามปกติของมัน
+  const onControl = !!target?.closest('button, a, [role="button"], [role="tab"], [role="checkbox"], label, select')
+
   if (event.key === 'Delete' || event.key === 'Backspace') {
     event.preventDefault()
     undoReveal()
-    return
-  }
-
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+  } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || (event.key === ' ' && !onControl)) {
     event.preventDefault()
-    moveFocusAndAutoReveal(activeHiddenIndex.value + 1)
-    return
-  }
-
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    revealNext()
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
     event.preventDefault()
-    moveFocusAndAutoReveal(activeHiddenIndex.value - 1)
-    return
+    hideCurrentAndBack()
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    toggleAll(false)
+    activeHiddenIndex.value = -1
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    toggleAll(true)
+    activeHiddenIndex.value = hiddenWords.value.length - 1
   }
 }
 
@@ -634,7 +699,7 @@ onUnmounted(() => {
             rows="3"
             :style="{ fontSize: `${editFontSize}rem` }"
             class="notion-input"
-            placeholder="พิมพ์หรือวางบทสวดบาลี... (ขึ้นบรรทัดใหม่ได้ตามต้องการ)"
+            placeholder="พิมพ์หรือวางบทสวดบาลี... (วาง Markdown ได้ ระบบจะแสดงเป็นข้อความธรรมดาในพื้นที่เลือกคำ)"
           ></textarea>
         </template>
 
@@ -762,6 +827,7 @@ onUnmounted(() => {
                 <span
                   v-else-if="item.isHidden"
                   @click="toggleWord(item)"
+                  @focus="activeHiddenIndex = hiddenWords.findIndex(w => w.id === item.id)"
                   @keydown.enter.prevent="toggleWord(item)"
                   @keydown.space.prevent="toggleWord(item)"
                   class="hidden-slot"
@@ -795,9 +861,11 @@ onUnmounted(() => {
       </span>
       <span v-else>
         💡 <b>คีย์บอร์ด:</b>
-        <kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd> เลื่อน + Auto เปิดเฉลย |
-        <kbd>Delete</kbd>/<kbd>Backspace</kbd> ปิดคำล่าสุดถอยหลังทีละคำ |
-        <kbd>Shift</kbd>+<kbd>C</kbd> สลับเปิด/ปิดทั้งหมด
+        <kbd>→</kbd>/<kbd>Space</kbd> เปิดคำถัดไป |
+        <kbd>←</kbd> ปิดคำนี้แล้วถอย |
+        <kbd>Delete</kbd> ปิดคำที่เปิดล่าสุด |
+        <kbd>Home</kbd>/<kbd>End</kbd> ซ่อน/เปิดทั้งหมด |
+        <kbd>Shift</kbd>+<kbd>C</kbd> สลับทั้งหมด
       </span>
     </footer>
   </div>
