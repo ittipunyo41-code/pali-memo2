@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { buildExportHtml } from './exportHtml'
+import { exportToPdf } from './exportPdf'
 
 interface WordItem {
   id: number
@@ -550,6 +551,15 @@ const exportHTML = () => {
   URL.revokeObjectURL(url)
 }
 
+// ============ Export เป็น PDF (ใบฝึกซ่อนคำ + หน้าเฉลย) ============
+const exportPDF = () => {
+  if (processedWords.value.length === 0) return
+  exportToPdf(processedWords.value, {
+    title: currentTitle.value,
+    includeAnswerKey: true
+  })
+}
+
 // ============ PWA: ติดตั้งแอป / สถานะออนไลน์ ============
 const onBeforeInstall = (e: Event) => {
   e.preventDefault()
@@ -654,6 +664,15 @@ onUnmounted(() => {
           title="ดาวน์โหลดไฟล์ HTML สำหรับฝึกออฟไลน์"
         >
           ⬇️ Export HTML
+        </button>
+
+        <button
+          @click="exportPDF"
+          class="btn-export"
+          :disabled="totalCount === 0"
+          title="บันทึกเป็น PDF (ใบฝึกที่ซ่อนคำ + หน้าเฉลย) — เลือก “บันทึกเป็น PDF” ในหน้าต่างพิมพ์"
+        >
+          📄 Export PDF
         </button>
 
         <button @click="cycleTheme" class="btn-theme" :title="`ธีมปัจจุบัน: ${themeLabel} (คลิกเพื่อเปลี่ยน)`">
