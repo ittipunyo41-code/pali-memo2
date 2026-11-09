@@ -556,7 +556,8 @@ const exportPDF = () => {
   if (processedWords.value.length === 0) return
   exportToPdf(processedWords.value, {
     title: currentTitle.value,
-    includeAnswerKey: true
+    fontSize: fontSize.value,
+    theme: themeMode.value
   })
 }
 
@@ -670,7 +671,7 @@ onUnmounted(() => {
           @click="exportPDF"
           class="btn-export"
           :disabled="totalCount === 0"
-          title="บันทึกเป็น PDF (ใบฝึกที่ซ่อนคำ + หน้าเฉลย) — เลือก “บันทึกเป็น PDF” ในหน้าต่างพิมพ์"
+          title="บันทึกเป็น PDF หน้าตาเหมือนไฟล์ Export HTML (คำที่ซ่อนเป็นเส้นประ) — เลือก “บันทึกเป็น PDF” ในหน้าต่างพิมพ์"
         >
           📄 Export PDF
         </button>
