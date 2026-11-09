@@ -9,7 +9,7 @@ A Vue 3 + TypeScript app built with Vite and deployed to GitHub Pages using GitH
 - **My passages** – paste any text, choose the hidden words and save it as "บทของฉัน" (stored with the selection).
 - **Auto-save** – text, hidden words, theme, font size and saved passages are kept in `localStorage`, so everything survives a reload and works offline.
 - **Export HTML** – downloads a single offline file containing the current selection.
-- **Export PDF** – opens the print dialog with a worksheet where the hidden words are blank lines, followed by an answer-key page; choose "Save as PDF". Works offline and renders Thai/Pali text correctly.
+- **Export PDF** – opens the print dialog with exactly the same look as the exported HTML page (card, toolbar, hidden words as dashed slots, same theme and font size) sized as one continuous page; choose "Save as PDF". Works offline and renders Thai/Pali text correctly.
 
 ## Offline / PWA
 
