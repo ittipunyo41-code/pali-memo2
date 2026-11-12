@@ -143,6 +143,46 @@ export function buildExportHtml(words: ExportWord[], fontSize: number, theme: st
     background: var(--btn-bg); border: 1px solid var(--border); border-radius: 4px;
     padding: 0.05rem 0.3rem; font-family: monospace; font-size: 0.9em;
   }
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 15mm;
+    }
+
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    .line {
+      content-visibility: visible !important;
+      contain: none !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+
+    html, body {
+      height: auto !important;
+      min-height: auto !important;
+      overflow: visible !important;
+      display: block !important;
+      background: #ffffff !important;
+      padding: 0 !important;
+    }
+
+    .container {
+      max-width: 100% !important;
+      box-shadow: none !important;
+      border: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: #ffffff !important;
+    }
+
+    .toolbar, .footer {
+      display: none !important;
+    }
+  }
 </style>
 </head>
 <body>
